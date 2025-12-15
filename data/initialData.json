@@ -1,0 +1,11 @@
+[
+  {
+    "id": "welcome-task-1",
+    "content": "Welcome! This is a sample task loaded from data/initialData.json",
+    "isCompleted": false,
+    "targetDate": "",
+    "priority": "medium",
+    "createdAt": 1715000000000,
+    "estimatedDuration": 15
+  }
+]
