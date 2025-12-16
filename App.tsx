@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Calendar, Sun, Moon, Sparkles, ChevronRight, Settings, X, Clock, Zap } from 'lucide-react';
-import { Plan, Priority } from './types';
+import { Plan, Priority, Category } from './types';
 import { STORAGE_KEY } from './constants';
 import { PlanInput } from './components/PlanInput';
 import { PlanItem } from './components/PlanItem';
@@ -38,6 +38,16 @@ const parseTime = (timeStr: string): number => {
   return hours * 60 + minutes;
 };
 
+// Helper: Get a Date object that visually represents Shanghai Time (UTC+8)
+// This creates a Date object where .getHours(), .getDate() etc. return Shanghai values.
+// NOTE: The internal timestamp of this object is technically shifted, but we use it for display logic.
+const getShanghaiDate = () => {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const shanghaiOffset = 8; // UTC+8
+  return new Date(utc + (3600000 * shanghaiOffset));
+};
+
 const App: React.FC = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [aiTip, setAiTip] = useState<string | null>(null);
@@ -50,31 +60,42 @@ const App: React.FC = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Date Logic with "Night Owl" adjustment
+  // Date Logic with "Night Owl" adjustment, strictly using Shanghai Time
   const { todayStr, tomorrowStr, todayDisplay, tomorrowDisplay } = useMemo(() => {
-    const now = new Date();
-    // Virtual date shift: if before 4 AM, shift back 1 day
-    if (now.getHours() < 4) {
-      now.setDate(now.getDate() - 1);
+    // 1. Get current time in Shanghai
+    const shanghaiNow = getShanghaiDate();
+
+    // 2. Virtual date shift: if before 4 AM (Shanghai time), shift back 1 day
+    if (shanghaiNow.getHours() < 4) {
+      shanghaiNow.setDate(shanghaiNow.getDate() - 1);
     }
-    const vToday = new Date(now);
-    const vTomorrow = new Date(now);
+
+    const vToday = new Date(shanghaiNow);
+    const vTomorrow = new Date(shanghaiNow);
     vTomorrow.setDate(vTomorrow.getDate() + 1);
 
     return {
+      // toISOString returns UTC, but since we shifted the time manually to match Shanghai face value,
+      // the date part of the ISO string matches Shanghai date.
       todayStr: vToday.toISOString().split('T')[0],
       tomorrowStr: vTomorrow.toISOString().split('T')[0],
       todayDisplay: vToday.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
       tomorrowDisplay: vTomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
     };
-  }, []); 
+  }, []); // Empty dependency array means this runs once on mount/reload. Ideally we might want a timer, but this is sufficient.
 
   // Initial Load
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
-        setPlans(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        // Migration: Ensure all plans have a category field (for legacy data)
+        const migrated = parsed.map((p: any) => ({
+          ...p,
+          category: p.category || 'personal'
+        }));
+        setPlans(migrated);
       } catch (e) {
         console.error("Failed to parse plans", e);
         loadInitialData();
@@ -151,13 +172,14 @@ const App: React.FC = () => {
     setNotification({ message, type });
   };
 
-  const addPlan = (content: string, priority: Priority, targetDate: string, duration?: number) => {
+  const addPlan = (content: string, priority: Priority, category: Category, targetDate: string, duration?: number) => {
     const newPlan: Plan = {
       id: crypto.randomUUID(),
       content,
       isCompleted: false,
       targetDate: targetDate, 
       priority,
+      category,
       createdAt: Date.now(),
       estimatedDuration: duration,
     };
@@ -222,12 +244,12 @@ const App: React.FC = () => {
 
     setIsOptimizingToday(true);
     try {
-      // For today, check if it's rest time or work time
-      const now = new Date();
+      // Use Shanghai Time for current status
+      const shanghaiNow = getShanghaiDate();
       let startTimeString = "";
       
-      const currentHour = now.getHours();
-      const currentMin = now.getMinutes();
+      const currentHour = shanghaiNow.getHours();
+      const currentMin = shanghaiNow.getMinutes();
       
       // 09:30 in minutes is 9 * 60 + 30 = 570 minutes
       const nowMinutes = currentHour * 60 + currentMin;
@@ -239,11 +261,11 @@ const App: React.FC = () => {
       } else {
         // If it's already past 09:30, start "Now" (rounded to next 15 min)
         const remainder = 15 - (currentMin % 15);
-        now.setMinutes(currentMin + remainder);
+        shanghaiNow.setMinutes(currentMin + remainder);
         
         // Manual 24h formatting to avoid locale issues "HH:MM"
-        const h = now.getHours().toString().padStart(2, '0');
-        const m = now.getMinutes().toString().padStart(2, '0');
+        const h = shanghaiNow.getHours().toString().padStart(2, '0');
+        const m = shanghaiNow.getMinutes().toString().padStart(2, '0');
         startTimeString = `${h}:${m}`;
       }
       
@@ -299,7 +321,12 @@ const App: React.FC = () => {
       
       if (isValidStructure) {
         if (window.confirm("This will replace all current tasks with the data from the text box. Continue?")) {
-          setPlans(parsedData);
+           // Migration: Ensure all plans have a category field (for legacy data)
+          const migrated = parsedData.map((p: any) => ({
+            ...p,
+            category: p.category || 'personal'
+          }));
+          setPlans(migrated);
           setIsSettingsOpen(false); 
           showToast("Data restored successfully!", 'success');
         }
@@ -377,8 +404,8 @@ const App: React.FC = () => {
           {isAddingToday ? (
             <div className="animate-in fade-in zoom-in-95 duration-200 relative group">
               <PlanInput 
-                onAdd={(c, p, d) => {
-                  addPlan(c, p, todayStr, d);
+                onAdd={(c, p, cat, d) => {
+                  addPlan(c, p, cat, todayStr, d);
                   setIsAddingToday(false);
                   showToast("Task added to Today", 'success');
                 }}
@@ -438,7 +465,7 @@ const App: React.FC = () => {
           </div>
 
           <PlanInput 
-            onAdd={(c, p, d) => addPlan(c, p, tomorrowStr, d)} 
+            onAdd={(c, p, cat, d) => addPlan(c, p, cat, tomorrowStr, d)} 
             className="mb-6"
           />
 

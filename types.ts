@@ -1,17 +1,15 @@
 export type Priority = 'low' | 'medium' | 'high';
 
+export type Category = 'work' | 'personal' | 'research' | 'entertainment';
+
 export interface Plan {
   id: string;
   content: string;
   isCompleted: boolean;
   targetDate: string; // ISO Date String YYYY-MM-DD
   priority: Priority;
+  category: Category;
   createdAt: number;
-  estimatedDuration?: number; // in minutes
-  suggestedTime?: string; // e.g. "09:00 AM"
-}
-
-export interface AiSuggestion {
-  text: string;
-  type: 'encouragement' | 'correction' | 'tip';
+  estimatedDuration?: number;
+  suggestedTime?: string;
 }

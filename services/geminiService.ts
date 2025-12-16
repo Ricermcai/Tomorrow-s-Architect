@@ -8,16 +8,17 @@ export const reviewPlans = async (plans: Plan[]): Promise<string> => {
     return "It looks like you haven't added any plans for tomorrow yet. Start by adding a few key tasks!";
   }
 
-  const planList = plans.map(p => `- [${p.priority.toUpperCase()}] ${p.content}`).join('\n');
+  const planList = plans.map(p => `- [${p.priority.toUpperCase()}] [${p.category.toUpperCase()}] ${p.content}`).join('\n');
 
   const prompt = `
-    You are an expert productivity coach. Review the following list of tasks planned for tomorrow:
+    You are an expert productivity coach. Review the following list of tasks planned for tomorrow.
+    Note the categories (WORK, PERSONAL, RESEARCH, ENTERTAINMENT) to understand the user's balance.
     
     ${planList}
     
     Provide a concise, friendly response (under 100 words). 
-    1. Acknowledge the workload.
-    2. Give 1 specific tip to ensure these get done (e.g., about prioritization or breaks).
+    1. Acknowledge the workload and the balance between categories.
+    2. Give 1 specific tip to ensure these get done (e.g., deep work for research, breaks after work).
     3. Be encouraging.
     Format as plain text, no markdown headers.
   `;
@@ -41,6 +42,7 @@ export const generateSchedule = async (plans: Plan[], startTime: string = "09:30
     id: p.id,
     content: p.content,
     priority: p.priority,
+    category: p.category,
     duration: p.estimatedDuration || 30 // Default to 30 mins if not provided
   }));
 
@@ -60,13 +62,9 @@ export const generateSchedule = async (plans: Plan[], startTime: string = "09:30
     
     Logic:
     - **CRITICAL**: Long tasks ARE ALLOWED to span across Lunch or Dinner breaks. 
-      - Example: A 3-hour task starting at 11:00 is perfectly fine. It implies the user works 11:00-12:00, takes a break, and resumes 13:30-15:30.
-    - **CONSTRAINT**: You simply must ensure the **Start Time** of a task does not fall *inside* a break.
-      - If a calculated start time is 12:15, move it to 13:30.
-      - If a calculated start time is 18:10, move it to 18:30.
-    - When calculating when the *next* task begins, account for the break time if the previous task spanned across it.
+    - **CONSTRAINT**: Start Time of a task must not fall *inside* a break.
+    - **GROUPING**: Try to group similar categories together (e.g. Research blocks, Work blocks) to reduce context switching, unless priority dictates otherwise.
     - Respect estimated durations.
-    - Group similar tasks if possible.
     - Return a valid JSON array of objects containing only 'id' and 'suggestedTime'.
   `;
 

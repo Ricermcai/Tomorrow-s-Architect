@@ -10,6 +10,14 @@ interface SettingsModalProps {
   onResetToInitial: () => void;
 }
 
+// Helper to get Shanghai date for file naming
+const getShanghaiDate = () => {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const shanghaiOffset = 8; // UTC+8
+  return new Date(utc + (3600000 * shanghaiOffset));
+};
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
@@ -44,8 +52,8 @@ export const initialData: Plan[] = ${JSON.stringify(currentData, null, 2)};`;
     const link = document.createElement("a");
     link.href = url;
     
-    // Create timestamp string like YYYY-MM-DD_HH-mm
-    const now = new Date();
+    // Create timestamp string like YYYY-MM-DD_HH-mm in Shanghai Time
+    const now = getShanghaiDate();
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-').slice(0, 5);
     
@@ -63,7 +71,11 @@ export const initialData: Plan[] = ${JSON.stringify(currentData, null, 2)};`;
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `tomorrows-architect-backup-${new Date().toISOString().split('T')[0]}.json`;
+    
+    const now = getShanghaiDate();
+    const dateStr = now.toISOString().split('T')[0];
+    
+    link.download = `tomorrows-architect-backup-${dateStr}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
